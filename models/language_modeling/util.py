@@ -2,6 +2,7 @@ import argparse
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from vocab import PAD_IDX
+from pathlib import Path
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -40,6 +41,7 @@ def get_kl_loss(mu, logvar):
 
 
 def save_model(model, optimizer, args, ipa_vocab, epoch, filepath):
+    Path(filepath).parent.mkdir(parents=True, exist_ok=True)
     save_info = {
         'model': model.state_dict(),
         'optim': optimizer.state_dict(),

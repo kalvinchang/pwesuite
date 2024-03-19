@@ -10,12 +10,13 @@ from vocab import *
 from models.language_modeling.language_model import MaskedLM
 from util import *
 from tqdm import tqdm
+import random
+import pickle
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 gpuid = os.environ.get('CUDA_VISIBLE_DEVICES', 0)
 print('gpu id is', gpuid)
-model_save_path = f'./checkpoints/gpu{gpuid}_best_loss.pt'
 
 
 def mask_phoneme(tokens, features):
@@ -170,17 +171,32 @@ def train(args, vocab, model):
     else:
         objective = masked_phoneme_objective
 
-    # TODO: next sentence prediction eventually (in tandem with masked LM or separately?)
-
     # TODO: sort the sequences by length? to avoid really bad padding scenarios
 
     loader_kwargs = {'batch_size': args.batch_size, 'num_workers': 0, 'pin_memory': True, 'collate_fn': collate_fn}
-    train_dset = IPATokenDataset([f'data/ipa_tokens_{lang}.txt' for lang in args.lang_codes], vocab,
-                                 split_bounds=(0, args.train_ratio))
+    num_tokens = 0
+    for lang in args.lang_codes:
+        with open(f'data/ipa_tokens/{lang}.txt', "r") as f:
+            num_tokens += len(f.readlines())
+    # dev = random subset of 1000
+    dev_indices = random.sample(range(num_tokens), 1000)
+    dev_idx_set = set(dev_indices)
+    # train = out of the remaining, pick args.number_thousands * 1000
+    train_indices = [i for i in range(num_tokens) if i not in dev_idx_set]
+    train_indices = train_indices[:args.number_thousands * 1000]
+    assert len(dev_idx_set & set(train_indices)) == 0
+
+    train_dset = IPATokenDataset([f'data/ipa_tokens/{lang}.txt' for lang in args.lang_codes], vocab,
+                                indices=train_indices)
     train_loader = DataLoader(train_dset, shuffle=True, **loader_kwargs)
-    val_dset = IPATokenDataset([f'data/ipa_tokens_{lang}.txt' for lang in args.lang_codes], vocab,
-                               split_bounds=(args.train_ratio, 1.0))
+    val_dset = IPATokenDataset([f'data/ipa_tokens/{lang}.txt' for lang in args.lang_codes], vocab,
+                                indices=dev_indices)
     val_loader = DataLoader(val_dset, shuffle=False, **loader_kwargs)
+
+    assert len(train_loader) == len(train_indices) // args.batch_size
+    assert len(val_loader) == len(dev_indices) // args.batch_size
+    print(f"Loaded {len(train_indices) // 1000}k words for training")
+
     best_intrinsic = 0
     evaluator = IntrinsicEvaluator()
     # list of IPA transcriptions for each word in the val dataset
@@ -233,21 +249,58 @@ def parse_args():
     parser.add_argument('--wandb_name', type=str, default="")
     parser.add_argument('--wandb_entity', type=str, default="kalvin")
     parser.add_argument('--sweeping', type=str2bool, default=False)
-    parser.add_argument('--train_ratio', type=float, default=0.999)
     parser.add_argument('--predict_vector', type=str2bool, default=False)
     parser.add_argument('--mask_percent', type=float, default=0.3)
+    parser.add_argument("--output", default="computed/embd_masked_lm.pkl")
+    parser.add_argument("--number_thousands", type=int, default=200, help="amount of training data to use")
     return parser.parse_args()
+
+
+def extract_embeddings(model, batch_size, model_save_path, embedding_path):
+    saved_info = torch.load(model_save_path)
+    # fetch the best model
+    model.load_state_dict(saved_info['model'])
+    args = saved_info['args']
+
+    loader_kwargs = {'batch_size': args.batch_size, 'num_workers': 0, 'pin_memory': True, 'collate_fn': collate_fn}
+    # no indices passed - use the whole data
+    full_data = IPATokenDataset([f'data/ipa_tokens/{lang}.txt' for lang in args.lang_codes], saved_info['ipa_vocab'])
+    # the data needs to be the same order as multi.tsv, so no shuffling
+    loader = DataLoader(full_data, shuffle=False, **loader_kwargs)
+    pooled_phon_embs = []
+
+    for batch in loader:
+        tokens = batch['tokens'].to(device)
+        feature_matrix = batch['feature_array'].to(device)
+        if args.predict_vector:
+            tokens, feature_matrix = mask_vector(tokens, feature_matrix)
+        else:
+            tokens, feature_matrix = mask_phoneme(tokens, feature_matrix)
+        embeddings = model.pool(feature_matrix)
+        assert embeddings.size()[-1] == args.embedding_dim
+        pooled_phon_embs.append(embeddings)
+
+    # convert to list of embeddings
+    pooled_phon_embs = torch.cat(pooled_phon_embs, dim=0).detach().cpu().numpy()
+    pooled_phon_embs = list(pooled_phon_embs)
+
+    assert len(full_data) == len(pooled_phon_embs)
+
+    Path(embedding_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(embedding_path, "wb") as f:
+        pickle.dump(pooled_phon_embs, f)
 
 
 if __name__ == '__main__':
     torch.manual_seed(0)
+    random.seed(0)
 
     args = parse_args()
     wandb.init(project="phonological-pooling", name=args.wandb_name, entity=args.wandb_entity,
                mode='disabled' if (not args.wandb_name and not args.sweeping) else 'online')
     wandb.run.log_code(".", include_fn=lambda path: path.endswith('.py'))
     wandb.config.update(args)
-    os.makedirs("checkpoints", exist_ok=True)
+    model_save_path = f'./computed/models/masked_lm_panphon_{"-".join(args.lang_codes)}_gpu{gpuid}_best_intrinsic.pt'
 
     # TODO: find a better way to get the dims from panphon
     PANPHON_FEATURE_DIM = 24
@@ -268,3 +321,5 @@ if __name__ == '__main__':
         predict_vector=args.predict_vector,
     ).to(device)
     train(args, ipa_vocab, model)
+
+    extract_embeddings(model, args.batch_size, model_save_path, args.output)

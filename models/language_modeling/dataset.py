@@ -3,16 +3,18 @@ from torch.utils.data import Dataset
 from vocab import BOS_IDX, EOS_IDX
 
 class IPATokenDataset(Dataset):
-    def __init__(self, input_files, vocab, split_bounds=(0, 1)):
+    def __init__(self, input_files, vocab, indices=None):
         super().__init__()
 
         self.ipa_tokens = []
         for fpath in input_files:
             with open(fpath) as f:
                 tokens = f.read().split()
-            length = len(tokens)
-            self.ipa_tokens.extend(tokens[int(length*split_bounds[0]):
-                                          int(length*split_bounds[1])])
+            self.ipa_tokens.extend(tokens)
+
+        if indices:
+            # use a subset of the data if a subset is specified
+            self.ipa_tokens = [self.ipa_tokens[i] for i in indices]
 
         self.ft = panphon.FeatureTable()
         self.vocab = vocab
