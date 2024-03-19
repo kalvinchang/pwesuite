@@ -1,0 +1,11 @@
+batch_size: 32
+classifier_dropout: 0.2536019729603164
+dim_feedforward: 20
+dropout: 0.31507673737980746
+embedding_dim: 300
+epochs: 491
+lang_codes: es10000
+lr: 0.0003469885451097745
+mask_percent: 0.2780264034657881
+num_heads: 2
+num_layers: 3
