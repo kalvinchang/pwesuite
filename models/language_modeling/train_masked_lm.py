@@ -7,11 +7,12 @@ import wandb
 from dataset import IPATokenDataset
 from intrinsic_eval import IntrinsicEvaluator
 from vocab import *
-from models.language_modeling.language_model import MaskedLM
+from language_model import MaskedLM
 from util import *
 from tqdm import tqdm
 import random
 import pickle
+import math
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -193,8 +194,10 @@ def train(args, vocab, model):
                                 indices=dev_indices)
     val_loader = DataLoader(val_dset, shuffle=False, **loader_kwargs)
 
-    assert len(train_loader) == len(train_indices) // args.batch_size
-    assert len(val_loader) == len(dev_indices) // args.batch_size
+    print(len(train_loader), len(train_indices), len(train_indices) // args.batch_size)
+    print(len(val_loader), len(dev_indices), len(dev_indices) // args.batch_size)
+    assert len(train_loader) == math.ceil(len(train_indices) / args.batch_size)
+    assert len(val_loader) == math.ceil(len(dev_indices) / args.batch_size)
     print(f"Loaded {len(train_indices) // 1000}k words for training")
 
     best_intrinsic = 0
