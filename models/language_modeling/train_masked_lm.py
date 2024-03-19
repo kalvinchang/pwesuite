@@ -105,9 +105,9 @@ def train_step(model, train_loader, optimizer, objective, limit_iter_per_epoch=N
         if not torch.isnan(loss):
             total_loss += loss.item()
             num_masked_batches += 1
-        if limit_iter_per_epoch is not None and i >= limit_iter_per_epoch:
-            # this is nothing more than a way to log more frequently than every (full) epoch.
-            break
+        # if limit_iter_per_epoch is not None and i >= limit_iter_per_epoch:
+        #     # this is nothing more than a way to log more frequently than every (full) epoch.
+        #     break
 
     # N = len(train_loader)
     return {
@@ -205,7 +205,8 @@ def train(args, vocab, model):
     # list of IPA transcriptions for each word in the val dataset
     evaluator.set_phon_feats([d['ipa'] for d in val_dset])
 
-    # find out the correlation before any training
+    # find out the correlation before any training: save in case the model doesn't get better
+    save_model(model, optimizer, args, ipa_vocab, 0, model_save_path)
     val_loss_dict = validate_step(model, val_loader, objective, evaluator)
     spearman = val_loss_dict["val/intrinsic_spearman_correlation"]
     pearson = val_loss_dict["val/intrinsic_pearson_correlation"]
