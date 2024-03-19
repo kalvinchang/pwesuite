@@ -105,4 +105,5 @@ class MaskedLM(nn.Module):
         encoded_input = self.dense(segment_features)
         encoded_input = self.transformer(encoded_input)
 
-        return encoded_input[:, 0, :]
+        # actually use mean pooling for now, before we have a substitute for the next sentence prediction objective
+        return encoded_input.mean(dim=1)  #  encoded_input[:, 0, :]
