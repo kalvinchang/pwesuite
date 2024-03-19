@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from vocab import BOS_IDX, EOS_IDX
 from transformers.models.bert.modeling_bert import BertEncoder
+import math
 
 
 class AutoregressiveLM(nn.Module):
@@ -71,10 +72,43 @@ class AutoregressiveLM(nn.Module):
         return outputs[:, -1, :]
 
 
+class PositionalEncoding(nn.Module):
+    """
+    Source: The Annotated Transformer, http://nlp.seas.harvard.edu/annotated-transformer/
+    """
+    def __init__(self, d_model, dropout, max_len):
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+
+        # log space
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model)
+        )
+        # every other dimension is a sine/cosine wave
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        # (1, max_len, d_model)
+        pe = pe.unsqueeze(0)
+        # positional encodings are not learned parameters and don't need to be updated but should still be saved
+        self.register_buffer("pe", pe)
+
+    def forward(self, x):
+        """
+        Args:
+            x: Tensor, shape [batch_size, seq_len, embedding_dim]
+        """
+        x = x + self.pe[:, : x.size(1)].requires_grad_(False)
+        return self.dropout(x)
+
+
 class MaskedLM(nn.Module):
     def __init__(self, num_layers, input_dim, embedding_dim, num_heads, dim_feedforward, dropout, classifier_dropout, vocab_size, predict_vector):
         super().__init__()
         self.dense = nn.Linear(input_dim, embedding_dim)
+        self.positional_embeddings = PositionalEncoding(embedding_dim, dropout, 50)
+
         encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=num_heads, dim_feedforward=dim_feedforward,
                                                    batch_first=True, dropout=dropout)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
@@ -94,6 +128,7 @@ class MaskedLM(nn.Module):
         # map panphon features to dense 300-layer features because we want 300-dimensional embeddings out of the Transformer
             # and the Transformer's output is the same dimension as what goes into it
         encoded_input = self.dense(segment_features)
+        encoded_input = self.positional_embeddings(encoded_input)
         encoded_input = self.transformer(encoded_input)
         encoded_input = self.classifier_dropout(encoded_input)
         return self.linear(encoded_input)
@@ -103,6 +138,7 @@ class MaskedLM(nn.Module):
         # https://github.com/huggingface/transformers/blob/31d452c68b34c2567b62924ee0df40a83cbc52d5/src/transformers/models/bert/modeling_bert.py#L652
         # no linear Transformation because it's not trained
         encoded_input = self.dense(segment_features)
+        encoded_input = self.positional_embeddings(encoded_input)
         encoded_input = self.transformer(encoded_input)
 
         # actually use mean pooling for now, before we have a substitute for the next sentence prediction objective
