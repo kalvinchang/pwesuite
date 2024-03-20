@@ -300,11 +300,12 @@ if __name__ == '__main__':
     random.seed(0)
 
     args = parse_args()
-    wandb.init(project="phonological-pooling", name=args.wandb_name, entity=args.wandb_entity,
+    run = wandb.init(project="phonological-pooling", name=args.wandb_name, entity=args.wandb_entity,
                mode='disabled' if (not args.wandb_name and not args.sweeping) else 'online')
     wandb.run.log_code(".", include_fn=lambda path: path.endswith('.py'))
     wandb.config.update(args)
-    model_save_path = f'./computed/models/masked_lm_panphon_{"-".join(args.lang_codes)}_gpu{gpuid}_best_intrinsic.pt'
+    # get the run id from wandb to keep the best model from a previous run
+    model_save_path = f'./computed/models/masked_lm_panphon_{"-".join(args.lang_codes)}_{run.name}_best_intrinsic.pt'
 
     # TODO: find a better way to get the dims from panphon
     PANPHON_FEATURE_DIM = 24
