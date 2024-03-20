@@ -200,7 +200,6 @@ def train(args, vocab, model):
     assert len(val_loader) == math.ceil(len(dev_indices) / args.batch_size)
     print(f"Loaded {len(train_indices) // 1000}k words for training")
 
-    best_intrinsic = 0
     evaluator = IntrinsicEvaluator()
     # list of IPA transcriptions for each word in the val dataset
     evaluator.set_phon_feats([d['ipa'] for d in val_dset])
@@ -214,6 +213,7 @@ def train(args, vocab, model):
     wandb.log({"val/initial_pearson_correlation": pearson})
     print("Initial spearman correlation is,", spearman)
     print("Initial pearson correlation is,", pearson)
+    best_intrinsic = spearman
 
     for ep in range(args.epochs):
         t = time.time()
