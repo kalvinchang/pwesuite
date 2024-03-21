@@ -327,4 +327,4 @@ if __name__ == '__main__':
     ).to(device)
     train(args, ipa_vocab, model)
 
-    extract_embeddings(model, args.batch_size, model_save_path, args.output)
+    extract_embeddings(model, args.batch_size, model_save_path, f'computed/embd_masked_lm_panphon{"-".join(args.lang_codes)}_{run.name}.pkl')
