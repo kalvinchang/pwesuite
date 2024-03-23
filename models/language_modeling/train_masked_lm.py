@@ -260,6 +260,7 @@ def parse_args():
     return parser.parse_args()
 
 
+@torch.no_grad()
 def extract_embeddings(model, batch_size, model_save_path, embedding_path):
     saved_info = torch.load(model_save_path)
     # fetch the best model
