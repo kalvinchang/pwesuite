@@ -257,6 +257,7 @@ def parse_args():
     parser.add_argument('--mask_percent', type=float, default=0.3)
     parser.add_argument("--output", default="computed/embd_masked_lm.pkl")
     parser.add_argument("--number_thousands", type=int, default=200, help="amount of training data to use")
+    parser.add_argument("--max_len", type=int, default=150, help="maximum # IPA tokens for positional encoding")
     return parser.parse_args()
 
 
@@ -325,6 +326,7 @@ if __name__ == '__main__':
         classifier_dropout=args.classifier_dropout,
         vocab_size=len(ipa_vocab),
         predict_vector=args.predict_vector,
+        max_len=args.max_len,
     ).to(device)
     train(args, ipa_vocab, model)
 

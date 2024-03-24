@@ -104,10 +104,10 @@ class PositionalEncoding(nn.Module):
 
 
 class MaskedLM(nn.Module):
-    def __init__(self, num_layers, input_dim, embedding_dim, num_heads, dim_feedforward, dropout, classifier_dropout, vocab_size, predict_vector):
+    def __init__(self, num_layers, input_dim, embedding_dim, num_heads, dim_feedforward, dropout, classifier_dropout, vocab_size, predict_vector, max_len):
         super().__init__()
         self.dense = nn.Linear(input_dim, embedding_dim)
-        self.positional_embeddings = PositionalEncoding(embedding_dim, dropout, 50)
+        self.positional_embeddings = PositionalEncoding(embedding_dim, dropout, max_len)
 
         encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=num_heads, dim_feedforward=dim_feedforward,
                                                    batch_first=True, dropout=dropout)
