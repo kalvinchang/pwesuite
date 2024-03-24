@@ -103,6 +103,41 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
+class BertEmbeddings(nn.Module):
+    """
+    Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L180
+    """
+    def __init__(self, vocab_size, embedding_dim, max_len, dropout):
+        self.phoneme_embeddings = nn.Embedding(vocab_size, embedding_dim)
+        self.feature_embeddings = nn.Embedding(24, embedding_dim)
+        self.positional_embeddings = nn.Embedding(max_len, embedding_dim)
+        self.layer_norm = nn.LayerNorm(embedding_dim)
+        self.dropout = nn.Dropout(dropout)
+        # absolute embeddings encode absolute position of the phoneme in the word
+        self.register_buffer("position_ids", torch.arange(max_len).expand((1, -1)), persistent=False)
+
+    def forward(self, phonemes, segment_features):
+        '''
+        Inputs:
+            phonemes - (B, S) each phoneme's index in the vocabulary from each batch
+            segment_features - (B, S, 24) each phoneme's panphon features from each batch
+        '''
+        feat_embed = self.feature_embeddings(segment_features)  # (B, S, 24, embedding_dim)
+        # sum the feature embeddings for a phoneme - (B, S, embedding_dim)
+        feat_embed = feat_embed.sum(dim=-2)
+        phn_embed = self.phoneme_embeddings(phonemes)
+        word_length = phonemes.size()[0]
+        position_ids = self.position_ids[:, :word_length]
+        pos_embed = self.positional_embeddings(position_ids)
+        embeds = feat_embed + phn_embed + pos_embed
+
+        # layer normalization, default layer_norm_eps=1e-5
+        emb = self.layer_norm(embeds)
+        # dropout
+        emb = self.dropout(emb)
+        return emb
+
+
 class MaskedLM(nn.Module):
     def __init__(self, num_layers, input_dim, embedding_dim, num_heads, dim_feedforward, dropout, classifier_dropout, vocab_size, predict_vector, max_len):
         super().__init__()
