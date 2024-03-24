@@ -22,7 +22,7 @@ def collate_fn(batch):
     tokens = pad_sequence(tokens, padding_value=PAD_IDX, batch_first=True)
 
     return {
-        'feature_array': feature_array.float(),
+        'feature_array': feature_array,
         'tokens': tokens,
     }
 

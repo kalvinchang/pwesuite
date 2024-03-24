@@ -107,9 +107,11 @@ class BertEmbeddings(nn.Module):
     """
     Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L180
     """
-    def __init__(self, vocab_size, embedding_dim, max_len, dropout):
+    def __init__(self, vocab_size, num_artic_feats, embedding_dim, max_len, dropout):
+        super().__init__()
         self.phoneme_embeddings = nn.Embedding(vocab_size, embedding_dim)
-        self.feature_embeddings = nn.Embedding(24, embedding_dim)
+        self.feature_embeddings = nn.Embedding(num_artic_feats, embedding_dim)
+        # learnable position embeddings
         self.positional_embeddings = nn.Embedding(max_len, embedding_dim)
         self.layer_norm = nn.LayerNorm(embedding_dim)
         self.dropout = nn.Dropout(dropout)
@@ -126,9 +128,9 @@ class BertEmbeddings(nn.Module):
         # sum the feature embeddings for a phoneme - (B, S, embedding_dim)
         feat_embed = feat_embed.sum(dim=-2)
         phn_embed = self.phoneme_embeddings(phonemes)
-        word_length = phonemes.size()[0]
+        word_length = phonemes.size()[1]
         position_ids = self.position_ids[:, :word_length]
-        pos_embed = self.positional_embeddings(position_ids)
+        pos_embed = self.positional_embeddings(position_ids) # (1, S, embedding_dim) broadcasted along the batch dim
         embeds = feat_embed + phn_embed + pos_embed
 
         # layer normalization, default layer_norm_eps=1e-5
@@ -139,10 +141,9 @@ class BertEmbeddings(nn.Module):
 
 
 class MaskedLM(nn.Module):
-    def __init__(self, num_layers, input_dim, embedding_dim, num_heads, dim_feedforward, dropout, classifier_dropout, vocab_size, predict_vector, max_len):
+    def __init__(self, num_layers, num_artic_feats, embedding_dim, num_heads, dim_feedforward, dropout, classifier_dropout, vocab_size, predict_vector, max_len):
         super().__init__()
-        self.dense = nn.Linear(input_dim, embedding_dim)
-        self.positional_embeddings = PositionalEncoding(embedding_dim, dropout, max_len)
+        self.embeddings = BertEmbeddings(vocab_size, num_artic_feats, embedding_dim, max_len, dropout)
 
         encoder_layer = nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=num_heads, dim_feedforward=dim_feedforward,
                                                    batch_first=True, dropout=dropout)
@@ -150,31 +151,36 @@ class MaskedLM(nn.Module):
         self.classifier_dropout = nn.Dropout(classifier_dropout)
         if predict_vector:
             # predict a panphon vector
-            self.linear = nn.Linear(embedding_dim, input_dim)   # to predict a panphon vector
+            self.linear = nn.Linear(embedding_dim, num_artic_feats)   # to predict a panphon vector
         else:
             # predict a phoneme
             self.linear = nn.Linear(embedding_dim, vocab_size)  # to predict a phoneme
 
-    def forward(self, segment_features):
+        # TODO: init weights
+
+    def forward(self, phonemes, segment_features):
         '''
         Inputs:
-            segment_features - (B, 1, 24) one token's panphon features from each batch
+            phonemes - (B, S) one phoneme's index in the vocabulary from each batch
+            segment_features - (B, S, 24) one phoneme's panphon features from each batch
         '''
         # map panphon features to dense 300-layer features because we want 300-dimensional embeddings out of the Transformer
             # and the Transformer's output is the same dimension as what goes into it
-        encoded_input = self.dense(segment_features)
-        encoded_input = self.positional_embeddings(encoded_input)
+        encoded_input = self.embeddings(phonemes, segment_features)
         encoded_input = self.transformer(encoded_input)
         encoded_input = self.classifier_dropout(encoded_input)
         return self.linear(encoded_input)
 
-    def pool(self, segment_features):
+    def mean_pool(self, phonemes, segment_features):
         # [CLS] pooling, similar to
         # https://github.com/huggingface/transformers/blob/31d452c68b34c2567b62924ee0df40a83cbc52d5/src/transformers/models/bert/modeling_bert.py#L652
         # no linear Transformation because it's not trained
-        encoded_input = self.dense(segment_features)
-        encoded_input = self.positional_embeddings(encoded_input)
+        encoded_input = self.embeddings(phonemes, segment_features)
         encoded_input = self.transformer(encoded_input)
 
         # actually use mean pooling for now, before we have a substitute for the next sentence prediction objective
         return encoded_input.mean(dim=1)  #  encoded_input[:, 0, :]
+
+    def embedding_pool(self, segment_features):
+        # TODO: get the phoneme embeddings for each phoneme then pool
+        pass

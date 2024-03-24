@@ -36,8 +36,8 @@ def mask_phoneme(tokens, features):
         tokens[b, selection] = MASK_IDX
 
     # prepend features for CLS and SEP along given dimensions
-    cls_features = torch.ones(features.shape[0], 1, features.shape[2]).to(device) * (MASK_IDX + CLS_IDX)
-    sep_features = torch.ones(features.shape[0], 1, features.shape[2]).to(device) * (MASK_IDX + SEP_IDX)
+    cls_features = torch.ones(features.shape[0], 1, features.shape[2], dtype=torch.int32).to(device) * (MASK_IDX + CLS_IDX)
+    sep_features = torch.ones(features.shape[0], 1, features.shape[2], dtype=torch.int32).to(device) * (MASK_IDX + SEP_IDX)
     features = torch.cat((cls_features, features, sep_features), dim=1)
     for b in range(features.shape[0]):
         selection = torch.flatten(mask[b].nonzero()).tolist()
@@ -91,7 +91,7 @@ def train_step(model, train_loader, optimizer, objective, limit_iter_per_epoch=N
         else:
             tokens, feature_matrix = mask_phoneme(tokens, feature_matrix)
 
-        logits = model(feature_matrix)
+        logits = model(tokens, feature_matrix)
         logits = logits.transpose(1, 2)  # (B, V, S) as expected by CrossEntropyLoss
         # no need to left shift the input because we are predicting masked tokens, not the next token
         target = tokens
@@ -134,14 +134,14 @@ def validate_step(model, val_loader, objective, evaluator):
 
         # intrinsic evaluation - first obtain a pooled embedding (the useful part)
         # take the LSTM output corresponding to the final token
-        embeddings = model.pool(feature_matrix)
+        word_embeddings = model.mean_pool(tokens, feature_matrix)
 
         assert embeddings.size()[-1] == args.embedding_dim
 
-        pooled_phon_embs.append(embeddings)
+        pooled_phon_embs.append(word_embeddings)
 
         # language modeling objective - see train_step() for more details
-        logits = model(feature_matrix)
+        logits = model(tokens, feature_matrix)
         logits = logits.transpose(1, 2)
         target = tokens
         loss = objective(logits, target)
@@ -275,14 +275,14 @@ def extract_embeddings(model, batch_size, model_save_path, embedding_path):
     loader = DataLoader(full_data, shuffle=False, **loader_kwargs)
     pooled_phon_embs = []
 
-    for batch in loader:
+    for batch in tqdm(loader):
         tokens = batch['tokens'].to(device)
         feature_matrix = batch['feature_array'].to(device)
         if args.predict_vector:
             tokens, feature_matrix = mask_vector(tokens, feature_matrix)
         else:
             tokens, feature_matrix = mask_phoneme(tokens, feature_matrix)
-        embeddings = model.pool(feature_matrix)
+        embeddings = model.mean_pool(tokens, feature_matrix)
         assert embeddings.size()[-1] == args.embedding_dim
         pooled_phon_embs.append(embeddings)
 
@@ -318,7 +318,7 @@ if __name__ == '__main__':
     ipa_vocab = Vocab(tokens_file=args.vocab_file)
     model = MaskedLM(
         num_layers=args.num_layers,
-        input_dim=PANPHON_FEATURE_DIM,
+        num_artic_feats=PANPHON_FEATURE_DIM,
         embedding_dim=args.embedding_dim,
         num_heads=args.num_heads,
         dim_feedforward=args.dim_feedforward,
