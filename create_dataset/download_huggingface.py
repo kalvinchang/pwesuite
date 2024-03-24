@@ -10,6 +10,8 @@ dataset = datasets.load_dataset("zouharvi/pwesuite-eval")
 writer = csv.writer(open("data/multi.tsv", "w"), delimiter="\t")
 
 for line in dataset["train"]:
+    if not line["token_ipa"] or not line["token_ort"] or not line["token_arp"]:
+        continue
     writer.writerow([
         line["token_ort"],
         line["token_ipa"],
