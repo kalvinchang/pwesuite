@@ -137,7 +137,7 @@ def validate_step(model, val_loader, objective, evaluator):
         # take the LSTM output corresponding to the final token
         word_embeddings = model.mean_pool(tokens, feature_matrix)
 
-        assert embeddings.size()[-1] == args.embedding_dim
+        assert word_embeddings.size()[-1] == args.embedding_dim
 
         pooled_phon_embs.append(word_embeddings)
 
