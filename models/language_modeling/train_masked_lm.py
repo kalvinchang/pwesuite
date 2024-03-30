@@ -3,6 +3,7 @@ import time
 
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
+from torch.nn.init import xavier_uniform_
 import wandb
 from dataset import IPATokenDataset
 from intrinsic_eval import IntrinsicEvaluator
@@ -328,6 +329,9 @@ if __name__ == '__main__':
         predict_vector=args.predict_vector,
         max_len=args.max_len,
     ).to(device)
+    for p in model.parameters():
+        if p.dim() > 1:
+            xavier_uniform_(p)
     train(args, ipa_vocab, model)
 
     extract_embeddings(model, args.batch_size, model_save_path, f'computed/embd_masked_lm_panphon{"-".join(args.lang_codes)}_{run.name}.pkl')
