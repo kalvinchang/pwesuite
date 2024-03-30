@@ -110,7 +110,6 @@ class BertEmbeddings(nn.Module):
     def __init__(self, vocab_size, num_artic_feats, embedding_dim, max_len, dropout):
         super().__init__()
         self.phoneme_embeddings = nn.Embedding(vocab_size, embedding_dim)
-        self.feature_embeddings = nn.Embedding(num_artic_feats, embedding_dim)
         # learnable position embeddings
         self.positional_embeddings = nn.Embedding(max_len, embedding_dim)
         self.layer_norm = nn.LayerNorm(embedding_dim)
@@ -124,14 +123,11 @@ class BertEmbeddings(nn.Module):
             phonemes - (B, S) each phoneme's index in the vocabulary from each batch
             segment_features - (B, S, 24) each phoneme's panphon features from each batch
         '''
-        feat_embed = self.feature_embeddings(segment_features)  # (B, S, 24, embedding_dim)
-        # sum the feature embeddings for a phoneme - (B, S, embedding_dim)
-        feat_embed = feat_embed.sum(dim=-2)
         phn_embed = self.phoneme_embeddings(phonemes)
         word_length = phonemes.size()[1]
         position_ids = self.position_ids[:, :word_length]
         pos_embed = self.positional_embeddings(position_ids) # (1, S, embedding_dim) broadcasted along the batch dim
-        embeds = feat_embed + phn_embed + pos_embed
+        embeds = phn_embed + pos_embed
 
         # layer normalization, default layer_norm_eps=1e-5
         emb = self.layer_norm(embeds)
