@@ -152,8 +152,6 @@ class MaskedLM(nn.Module):
             # predict a phoneme
             self.linear = nn.Linear(embedding_dim, vocab_size)  # to predict a phoneme
 
-        # TODO: init weights
-
     def forward(self, phonemes, segment_features):
         '''
         Inputs:
@@ -177,6 +175,6 @@ class MaskedLM(nn.Module):
         # actually use mean pooling for now, before we have a substitute for the next sentence prediction objective
         return encoded_input.mean(dim=1)  #  encoded_input[:, 0, :]
 
-    def embedding_pool(self, segment_features):
-        # TODO: get the phoneme embeddings for each phoneme then pool
-        pass
+    def embedding_mean_pool(self, phonemes, segment_features):
+        encoded_input = self.embeddings.phoneme_embeddings(phonemes)
+        return encoded_input.mean(dim=1)

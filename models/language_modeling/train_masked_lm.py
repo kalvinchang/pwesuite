@@ -135,7 +135,7 @@ def validate_step(model, val_loader, objective, evaluator):
 
         # intrinsic evaluation - first obtain a pooled embedding (the useful part)
         # take the LSTM output corresponding to the final token
-        word_embeddings = model.mean_pool(tokens, feature_matrix)
+        word_embeddings = model.embedding_mean_pool(tokens, feature_matrix)
 
         assert word_embeddings.size()[-1] == args.embedding_dim
 
@@ -279,11 +279,12 @@ def extract_embeddings(model, batch_size, model_save_path, embedding_path):
     for batch in tqdm(loader):
         tokens = batch['tokens'].to(device)
         feature_matrix = batch['feature_array'].to(device)
+        # TODO: should we really be masking here?
         if args.predict_vector:
             tokens, feature_matrix = mask_vector(tokens, feature_matrix)
         else:
             tokens, feature_matrix = mask_phoneme(tokens, feature_matrix)
-        embeddings = model.mean_pool(tokens, feature_matrix)
+        embeddings = model.embedding_mean_pool(tokens, feature_matrix)
         assert embeddings.size()[-1] == args.embedding_dim
         pooled_phon_embs.append(embeddings)
 
